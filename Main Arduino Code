@@ -1,0 +1,262 @@
+#include <Dabble.h>
+#include <Servo.h>
+#include <SR04.h>
+#include "SR04.h"
+#define CUSTOM_SETTINGS
+#define INCLUDE_GAMEPAD_MODULE
+
+#define echo 11 //orange
+#define trig 10//red
+#define En1 6
+#define Motor1_pin1 4
+#define Motor1_pin2 9
+#define Motor2_pin1 7
+#define Motor2_pin2 8
+#define En2 5
+
+unsigned long previousMillis = 0;
+const long interval = 500;
+
+Servo myservo;
+SR04 sr04 = SR04(echo, trig);
+float distance1, distance2;
+
+int flag = 0;
+//int speed = 100;
+
+class Car 
+{
+  public:
+      void Forward(int speed) 
+    {
+        digitalWrite(Motor1_pin1, HIGH);
+        digitalWrite(Motor1_pin2, LOW);
+        digitalWrite(Motor2_pin1, HIGH);
+        digitalWrite(Motor2_pin2, LOW);
+        analogWrite(En1, speed);
+        analogWrite(En2, speed);
+    }
+
+    void Backward(int speed) 
+    {
+        digitalWrite(Motor1_pin1, LOW);
+        digitalWrite(Motor1_pin2, HIGH);
+        digitalWrite(Motor2_pin1, LOW);
+        digitalWrite(Motor2_pin2, HIGH);
+        analogWrite(En1, speed);
+        analogWrite(En2, speed);
+    }
+
+    void Stop() {
+        digitalWrite(Motor1_pin1, LOW);
+        digitalWrite(Motor1_pin2, LOW);
+        digitalWrite(Motor2_pin1, LOW);
+        digitalWrite(Motor2_pin2, LOW);
+    }
+
+    void Left() {
+        digitalWrite(Motor1_pin1, HIGH);
+        digitalWrite(Motor1_pin2, LOW);
+        digitalWrite(Motor2_pin1, LOW);
+        digitalWrite(Motor2_pin2, HIGH);
+        analogWrite(En1, 255);
+        analogWrite(En2, 255);
+    }
+
+    void Right() {
+        digitalWrite(Motor1_pin1, LOW);
+        digitalWrite(Motor1_pin2, HIGH);
+        digitalWrite(Motor2_pin1, HIGH);
+        digitalWrite(Motor2_pin2, LOW);
+        analogWrite(En1, 255);
+        analogWrite(En2, 255);
+    }
+
+    void executeCommand(char command)
+     {
+        switch (command) {
+            case 'F': 
+              Forward(255); 
+               break;
+            case 'B':
+               Backward(255);
+               break;
+            case 'L':
+               Left(); 
+               break;
+            case 'R':
+               Right();
+               break;
+            case 'S':
+               Stop(); 
+               break;
+            default: 
+               break;
+        }
+    }
+
+    void Remote_control() 
+    {
+        Dabble.processInput();
+        if (GamePad.isUpPressed()) 
+        {
+          Forward(255);
+          delay(10);
+          Stop();
+        }
+        else if (GamePad.isDownPressed()) 
+        {
+          Backward(255);
+          delay(10);
+          Stop();
+        }
+
+        else if (GamePad.isLeftPressed()) 
+        {
+          Left();
+          delay(10);
+          Stop();
+        }
+        else if (GamePad.isRightPressed()) 
+        {
+          Right();
+          delay(10);
+          Stop();
+        }
+        else if (GamePad.isCrossPressed()) 
+        {
+          Forward(255);
+          delay(10);
+          Stop();
+        }
+        else if (GamePad.isSquarePressed()) 
+        {
+          Stop();
+        }
+    }
+
+    void Hand_Control() 
+    {
+      unsigned long currentMillis = millis();
+        while (Serial.available() > 0)
+        {
+           String command = Serial.readStringUntil('\n');
+              if (command.length() > 0) 
+              {
+                char action = command[0];
+                executeCommand(action);
+                previousMillis = currentMillis;
+              }
+              
+        }
+        if (currentMillis - previousMillis >= interval)
+                {
+                  Stop();
+                }
+    }
+
+    void Self_Controll()
+     {
+        myservo.write(90);
+        float distance = sr04.Distance();
+        delay(10);
+        if (distance > 20) 
+        {
+            Forward(100);
+        }
+         else 
+          {
+            Stop();
+            delay(100);
+
+            myservo.write(0);
+            delay(1000);
+            distance1 = sr04.Distance();
+            delay(1000);
+
+            myservo.write(180);
+            delay(1000);
+            distance2 = sr04.Distance();
+            delay(1000);
+
+            if (distance1 >= distance2) 
+              {
+                Right();
+                delay(300);
+                Stop();
+              } 
+            else 
+            {
+                Left();
+                delay(300);
+                Stop();
+            }
+            delay(10);
+            myservo.write(90);
+            delay(100); 
+          }
+        
+     }
+};
+
+
+
+void setup()
+{
+    Dabble.begin(9600);
+    Serial.begin(9600);
+
+    myservo.attach(12);
+
+    pinMode(En1, OUTPUT);
+    pinMode(Motor1_pin1, OUTPUT);
+    pinMode(Motor1_pin2, OUTPUT);
+    pinMode(Motor2_pin1, OUTPUT);
+    pinMode(Motor2_pin2, OUTPUT);
+    pinMode(En2, OUTPUT);
+      
+}
+
+Car car;
+void loop() 
+{
+  Dabble.processInput();
+    if (GamePad.isStartPressed())
+    {
+      flag = 0; 
+      car.Stop();
+      myservo.write(90);
+    
+    }
+    else if (GamePad.isSelectPressed())
+    {
+      flag = 1;
+      car.Stop(); 
+      myservo.write(90);
+    }
+    else if (GamePad.isTrianglePressed())
+    {
+      flag = 2 ;
+      car.Stop();
+      myservo.write(90);
+
+    }
+  switch (flag)
+  {
+        case 0 :
+          car.Remote_control();
+          break;
+
+        case 1 :
+          car.Self_Controll();
+          break;
+        case 2 :
+          car.Hand_Control();
+          break;
+        default:
+          car.Stop();
+  }
+  
+} 
+  
+  
