@@ -1,0 +1,116 @@
+import mediapipe as mp
+import cv2
+import math 
+import socket
+import time
+import serial
+esp32_ip='192.168.1.102'
+esp32_port=23
+ser = serial.Serial('COM10', 9600)
+time.sleep(2)
+def send_command(command):
+     ser.write((command + '\n').encode())
+     #ser.close()
+#  try:
+        
+#    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#        s.connect((esp32_ip,esp32_port))
+#     #   print(f"Command sent: {command}")
+#  except Exception as e:
+#           print("Error:", e)
+
+def calculate_distance(p1,p2):
+    return math.sqrt((p1.x - p2.x) ** 2 + (p1.y- p2.y) ** 2)
+
+def Calculate_angle(a, b, c):
+    ba = (a.x - b.x, a.y - b.y)
+    bc = (c.x - b.x, c.y - b.y)
+    cosangle = ((ba[0] * bc[0]) + (ba[1] * bc[1])) / (math.sqrt((ba[0] ** 2) + (ba[1] ** 2)) * math.sqrt((bc[0] ** 2) + (bc[1] ** 2)))
+    angle = math.acos(cosangle)
+    angle = math.degrees(angle)
+    return angle
+
+
+my_hands = mp.solutions.hands.Hands(max_num_hands=1)
+drawing_utilis = mp.solutions.drawing_utils
+webcam = cv2.VideoCapture(0)
+
+while True:
+    _, image = webcam.read()
+    frame_height, frame_width, _ = image.shape  
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    output = my_hands.process(rgb_image)
+    hands = output.multi_hand_landmarks
+    if hands:
+        for hand in hands:
+            drawing_utilis.draw_landmarks(image, hand, mp.solutions.hands.HAND_CONNECTIONS)
+            landmarks = hand.landmark
+            index_finger_tip= landmarks[8]
+            index_finger_mid = landmarks[12]
+            thumb_tip = landmarks[4]
+            wrist = landmarks[0]
+            mid_point = landmarks[2]
+            point5=landmarks[5]
+            point20=landmarks[20]
+            # Convert to pixel coordinates
+            wrist_x = int(wrist.x * frame_width)
+            wrist_y = int(wrist.y * frame_height)
+            index_finger_tip_x = int(index_finger_tip.x * frame_width)
+            index_finger_tip_y = int(index_finger_tip.y * frame_height)
+            index_finger_mid_x = int(index_finger_mid.x * frame_width)
+            index_finger_mid_y = int(index_finger_mid.y * frame_height)
+            thumb_tip_x = int(thumb_tip.x * frame_width)
+            thumb_tip_y = int(thumb_tip.y * frame_height) 
+            mid_point_x = int(mid_point.x * frame_width)
+            mid_point_y = int(mid_point.y * frame_height)  
+            point5_x = int(point5.x * frame_width)
+            point5_y = int(point5.y * frame_height)
+            point20_x=int(point20.x*frame_width)
+            point20_y=int(point20.y*frame_height)
+            
+            cv2.circle(img=image, center=(wrist_x, wrist_y), radius=8, color=(0, 255, 255), thickness=3)
+            cv2.circle(img=image, center=(index_finger_mid_x, index_finger_mid_y), radius=8, color=(255, 255, 255), thickness=3)
+            cv2.circle(img=image, center=(thumb_tip_x, thumb_tip_y), radius=8, color=(255, 0, 255), thickness=3)
+            cv2.circle(img=image, center=(index_finger_tip_x, index_finger_tip_y), radius=8, color=(255, 255, 0), thickness=3)
+            cv2.circle(img=image, center=(mid_point_x, mid_point_y), radius=8, color=(255, 0, 100), thickness=3)
+
+      
+            angle = Calculate_angle(index_finger_tip, mid_point, thumb_tip)
+            diff_4_8_x = index_finger_tip_x - thumb_tip_x
+            diff_0_12_y = wrist_y - index_finger_tip_y
+            diff_4_8_y =index_finger_tip_y - thumb_tip_y
+            distance_4_5=calculate_distance(point5,thumb_tip)
+            distance_0_4=calculate_distance(thumb_tip,wrist)
+            distance_0_8=calculate_distance(wrist,index_finger_tip)
+            distance_4_8=calculate_distance(thumb_tip,index_finger_tip)
+            diff_0_20_y=-point20_y+wrist_y  
+            diff_8_20_x = index_finger_tip_x-point20_x
+            direction=""
+            command=""
+            if diff_0_12_y>30 and angle<30:
+                  direction = "Forward"
+                  command='F'
+            elif diff_0_12_y<20 and angle<30:
+                 direction="Backward"
+                 command='B'
+            elif  diff_4_8_x> 10 and angle > 70:
+                  direction = "Left"
+                  command='L'
+            elif  diff_4_8_x< -10 and angle>30:
+                  direction = "Right"
+                  command='R'
+            elif diff_0_20_y > 100 and diff_8_20_x<-100:
+                  direction = "Stop"
+                  command='S'
+             
+            cv2.putText(image, direction, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            send_command(command)
+      
+ 
+    cv2.imshow("Hand Control", image)
+    key = cv2.waitKey(10)
+    if key == 27:
+        break
+
+webcam.release()
+cv2.destroyAllWindows()
